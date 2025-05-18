@@ -7,6 +7,7 @@ from agno.models.azure import AzureOpenAI
 from agno.tools.duckduckgo import DuckDuckGoTools
 from agno.tools.exa import ExaTools
 from agno.tools.yfinance import YFinanceTools
+from agno.tools.decorator import tool
 
 
 def test_tool_use():
@@ -224,3 +225,54 @@ def test_tool_call_list_parameters():
         if call.get("type", "") == "function":
             assert call["function"]["name"] in ["get_contents", "exa_answer"]
     assert response.content is not None
+
+
+
+# Test case for tool returning None
+def test_tool_returns_none():
+    """Tests that the agent handles a tool returning None correctly."""
+
+    @tool
+    def tool_that_returns_none(query: str) -> None:
+        """A simple tool that processes a query but returns None."""
+        print(f"Processed query: {query}, returning None")
+        return None
+
+    agent = Agent(
+        model=AzureOpenAI(id="gpt-4o-mini"),
+        tools=[tool_that_returns_none],
+        show_tool_calls=True,
+        markdown=True,
+        telemetry=False,
+        monitoring=False,
+    )
+
+    # Run the agent with a prompt designed to trigger the tool
+    response = agent.run("Process this query using the special tool: hello")
+
+    # Verify that a tool call happened and the corresponding ToolMessage has empty content
+    tool_call_made = False
+    tool_message_found_with_empty_content = False
+    tool_id = None
+
+    for msg in response.messages:
+        if msg.role == "assistant" and msg.tool_calls:
+            tool_call_made = True
+            # Assuming one tool call for simplicity in this test
+            if len(msg.tool_calls) == 1:
+                tool_id = msg.tool_calls[0].get("id")
+        elif msg.role == "tool" and msg.tool_call_id == tool_id:
+            assert msg.content == "", f"ToolMessage content should be empty string, but got: {msg.content!r}"
+            tool_message_found_with_empty_content = True
+
+    assert tool_call_made, "Assistant message with tool call not found."
+    assert tool_message_found_with_empty_content, "Tool message with empty content not found."
+    # Also assert that the final response content is not None (agent should summarize or respond)
+    assert response.content is not None, "Agent final response content should not be None."
+
+
+# To run only this test file, use one of the following commands:
+# pytest libs/agno/tests/integration/models/azure/openai/test_tool_use.py -v
+# 
+# To run a specific test in this file:
+# pytest libs/agno/tests/integration/models/azure/openai/test_tool_use.py::test_tool_returns_none -v

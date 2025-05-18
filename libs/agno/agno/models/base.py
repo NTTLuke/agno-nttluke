@@ -434,8 +434,9 @@ class Model(ABC):
             assistant_message.role = provider_response.role
 
         # Add content to assistant message
+        # Handle None content by assigning an empty string
         if provider_response.content is not None:
-            assistant_message.content = provider_response.content
+            assistant_message.content = provider_response.content if provider_response.content is not None else ""
 
         # Add tool calls to assistant message
         if provider_response.tool_calls is not None and len(provider_response.tool_calls) > 0:
@@ -816,9 +817,11 @@ class Model(ABC):
         self, fc: FunctionCall, success: bool, output: Optional[Union[List[Any], str]], timer: Timer
     ) -> Message:
         """Create a function call result message."""
+        # Ensure content is an empty string if output is None
+        message_content = (output if success else fc.error) if (output if success else fc.error) is not None else ""
         return Message(
             role=self.tool_message_role,
-            content=output if success else fc.error,
+            content=message_content,
             tool_call_id=fc.call_id,
             tool_name=fc.function.name,
             tool_args=fc.arguments,
